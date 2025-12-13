@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Session Viewer</title>
+  <style>
+    :root {
+      --coral: #F87171;
+      --coral-light: #FEE2E2;
+      --coral-dark: #DC2626;
+      --gray-50: #F9FAFB;
+      --gray-100: #F3F4F6;
+      --gray-200: #E5E7EB;
+      --gray-300: #D1D5DB;
+      --gray-400: #9CA3AF;
+      --gray-500: #6B7280;
+      --gray-600: #4B5563;
+      --gray-700: #374151;
+      --gray-800: #1F2937;
+      --gray-900: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: var(--gray-100);
+      color: var(--gray-800);
+      line-height: 1.6;
+    }
+
+    /* Header */
+    .header {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header h1 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+
+    .header-controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .session-select {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--gray-300);
+      background: white;
+      color: var(--gray-700);
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+
+    .session-select:focus {
+      outline: none;
+      border-color: var(--coral);
+      box-shadow: 0 0 0 3px var(--coral-light);
+    }
+
+    /* Main container */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* Session metadata */
+    .session-meta {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .session-meta h2 {
+      font-size: 1.125rem;
+      margin-bottom: 0.5rem;
+      color: var(--gray-900);
+    }
+
+    .session-meta .meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      font-size: 0.8125rem;
+      color: var(--gray-500);
+      margin-bottom: 0.5rem;
+    }
+
+    .session-meta .meta-row span {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .session-meta .summary {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--gray-100);
+      font-size: 0.875rem;
+      color: var(--gray-600);
+      white-space: pre-wrap;
+    }
+
+    /* Timeline */
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    /* Turn cards */
+    .turn {
+      background: white;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .turn-header {
+      margin-bottom: 0.5rem;
+    }
+
+    .turn-role {
+      font-size: 0.8125rem;
+      font-weight: 500;
+    }
+
+    .turn.user .turn-role {
+      background: var(--coral-light);
+      color: var(--coral-dark);
+      padding: 0.25rem 0.625rem;
+      border-radius: 4px;
+      display: inline-block;
+    }
+
+    .turn.assistant .turn-role {
+      font-weight: 600;
+      color: var(--gray-800);
+      background: none;
+      padding: 0;
+    }
+
+    .turn-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .skill-badge {
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 0.125rem 0.5rem;
+      background: #FEF3C7;
+      color: #92400E;
+      border-radius: 4px;
+    }
+
+    .internal-badge {
+      font-size: 0.6875rem;
+      font-weight: 500;
+      padding: 0.125rem 0.5rem;
+      background: var(--gray-200);
+      color: var(--gray-500);
+      border-radius: 4px;
+      text-transform: lowercase;
+    }
+
+    .turn.internal {
+      border-left-style: dashed;
+      opacity: 0.75;
+      margin-left: 1.5rem;
+    }
+
+    .turn.internal .turn-content {
+      color: var(--gray-500);
+    }
+
+    /* Thinking blocks */
+    .thinking-block {
+      margin: 0.5rem 0;
+    }
+
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      background: var(--gray-100);
+      border: 1px dashed var(--gray-300);
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8125rem;
+      color: var(--gray-500);
+      width: 100%;
+      text-align: left;
+      transition: all 0.15s;
+    }
+
+    .thinking-header:hover {
+      background: var(--gray-200);
+      border-color: var(--gray-400);
+    }
+
+    .thinking-icon {
+      font-size: 0.625rem;
+      color: var(--gray-400);
+    }
+
+    .thinking-label {
+      font-weight: 500;
+      color: var(--gray-600);
+    }
+
+    .thinking-summary {
+      color: var(--gray-400);
+    }
+
+    .thinking-content {
+      margin-top: 0.5rem;
+      padding-left: 1rem;
+      border-left: 2px dashed var(--gray-200);
+    }
+
+    .thinking-content .turn {
+      margin-bottom: 0.5rem;
+    }
+
+    .turn-timestamp {
+      display: none;
+    }
+
+    .turn-content {
+      font-size: 0.9375rem;
+      color: var(--gray-700);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .turn.user {
+      border-left: 3px solid var(--coral);
+      background: white;
+    }
+
+    .turn.assistant {
+      border-left: none;
+      background: white;
+    }
+
+    /* Tool calls */
+    .tool-calls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--gray-100);
+    }
+
+    .tool-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      background: var(--gray-100);
+      border-radius: 6px;
+      font-size: 0.8125rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+      font-family: inherit;
+    }
+
+    .tool-chip:hover {
+      background: var(--gray-200);
+      border-color: var(--gray-300);
+    }
+
+    .tool-chip.expanded {
+      background: var(--coral-light);
+      border-color: var(--coral);
+    }
+
+    .tool-chip.skill-chip {
+      background: #FEF3C7;
+      border-color: #F59E0B;
+    }
+
+    .tool-chip.skill-chip:hover {
+      background: #FDE68A;
+    }
+
+    .tool-chip.skill-chip.expanded {
+      background: #FDE68A;
+      border-color: #D97706;
+    }
+
+    .tool-chip-icon {
+      font-size: 0.875rem;
+    }
+
+    .tool-chip-name {
+      font-weight: 500;
+      color: var(--gray-700);
+    }
+
+    .tool-chip-detail {
+      color: var(--gray-500);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Tool expansion */
+    .tool-expansion {
+      margin-top: 0.75rem;
+      padding: 1rem;
+      background: var(--gray-50);
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+      font-size: 0.8125rem;
+      overflow-x: auto;
+    }
+
+    .tool-expansion-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--gray-200);
+    }
+
+    .tool-expansion-title {
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+
+    .tool-expansion-content {
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      color: var(--gray-600);
+    }
+
+    .tool-expansion-content.diff .line-add {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .tool-expansion-content.diff .line-remove {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    /* Tool result */
+    .tool-result {
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed var(--gray-300);
+    }
+
+    .tool-result-label {
+      font-size: 0.75rem;
+      color: var(--gray-400);
+      margin-bottom: 0.25rem;
+    }
+
+    /* Loading and error states */
+    .loading, .error {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--gray-500);
+    }
+
+    .error {
+      color: var(--coral-dark);
+    }
+
+    .no-sessions {
+      text-align: center;
+      padding: 4rem 2rem;
+      color: var(--gray-500);
+    }
+
+    .no-sessions code {
+      display: block;
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+
+    /* Hide tool results by default (they appear in user messages) */
+    .turn.user.tool-result-turn {
+      display: none;
+    }
+
+    .turn.user.tool-result-turn.show-results {
+      display: block;
+      opacity: 0.7;
+      font-size: 0.875rem;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>Session Viewer</h1>
+    <div class="header-controls">
+      <select class="session-select" id="sessionSelect">
+        <option value="">Loading sessions...</option>
+      </select>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="content">
+      <div class="loading">Loading...</div>
+    </div>
+  </main>
+
+  <script>
+    // State
+    let sessions = [];
+    let currentSession = null;
+    let expandedTools = new Set();
+    let expandedThinking = new Set();
+
+    // DOM elements
+    const sessionSelect = document.getElementById('sessionSelect');
+    const content = document.getElementById('content');
+
+    // Initialize
+    async function init() {
+      await discoverSessions();
+      if (sessions.length > 0) {
+        await loadSession(sessions[0]);
+      }
+    }
+
+    // Discover available session files
+    async function discoverSessions() {
+      // Try common locations for session files
+      const locations = [
+        'session-backups/',
+        './',
+      ];
+
+      const foundSessions = [];
+
+      for (const loc of locations) {
+        try {
+          // Try to fetch an index or known files
+          // Since we can't list directories, we'll try common patterns
+          const response = await fetch(loc);
+          if (response.ok) {
+            const text = await response.text();
+            // Parse directory listing if it's an Apache/nginx index
+            const matches = text.matchAll(/href="([^"]+\.json)"/g);
+            for (const match of matches) {
+              const filename = match[1];
+              if (!filename.startsWith('.')) {
+                foundSessions.push(loc + filename);
+              }
+            }
+          }
+        } catch (e) {
+          // Ignore errors, location might not exist
+        }
+      }
+
+      // Also try the example session directly
+      try {
+        const response = await fetch('example-session.json');
+        if (response.ok) {
+          foundSessions.push('example-session.json');
+        }
+      } catch (e) {}
+
+      // Dedupe
+      sessions = [...new Set(foundSessions)];
+
+      // Update dropdown
+      if (sessions.length === 0) {
+        sessionSelect.innerHTML = '<option value="">No sessions found</option>';
+        content.innerHTML = `
+          <div class="no-sessions">
+            <p>No session files found.</p>
+            <p>Place JSON session files in this directory or in a <code>session-backups/</code> subdirectory.</p>
+            <code>python -m http.server 8000</code>
+          </div>
+        `;
+      } else {
+        sessionSelect.innerHTML = sessions.map(s => {
+          const name = s.split('/').pop().replace('.json', '');
+          return `<option value="${s}">${name}</option>`;
+        }).join('');
+      }
+
+      // Handle selection changes
+      sessionSelect.addEventListener('change', async (e) => {
+        if (e.target.value) {
+          await loadSession(e.target.value);
+        }
+      });
+    }
+
+    // Load a session file
+    async function loadSession(url) {
+      content.innerHTML = '<div class="loading">Loading session...</div>';
+      expandedTools = new Set();
+
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Failed to load: ${response.status}`);
+
+        currentSession = await response.json();
+        renderSession();
+      } catch (e) {
+        content.innerHTML = `<div class="error">Error loading session: ${e.message}</div>`;
+      }
+    }
+
+    // Render the current session
+    function renderSession() {
+      if (!currentSession) return;
+
+      const { metadata, summary, conversation } = currentSession;
+
+      // Build HTML
+      let html = '';
+
+      // Session metadata
+      html += `
+        <div class="session-meta">
+          <h2>${escapeHtml(metadata.topic || 'Untitled Session')}</h2>
+          <div class="meta-row">
+            <span>📅 ${formatDate(metadata.backupDate || metadata.timestamp)}</span>
+            <span>📁 ${escapeHtml(metadata.cwd || 'Unknown')}</span>
+            ${metadata.gitBranch ? `<span>🌿 ${escapeHtml(metadata.gitBranch)}</span>` : ''}
+          </div>
+          ${summary ? `<div class="summary">${escapeHtml(summary)}</div>` : ''}
+        </div>
+      `;
+
+      // Timeline
+      html += '<div class="timeline">';
+
+      // Process conversation - merge tool results back into assistant turns
+      const processedTurns = processConversation(conversation);
+
+      // Group consecutive internal turns into thinking blocks
+      let i = 0;
+      let thinkingBlockId = 0;
+      while (i < processedTurns.length) {
+        const turn = processedTurns[i];
+
+        if (turn.isInternal) {
+          // Collect consecutive internal turns
+          const internalTurns = [];
+          while (i < processedTurns.length && processedTurns[i].isInternal) {
+            internalTurns.push(processedTurns[i]);
+            i++;
+          }
+          // Render as thinking block
+          html += renderThinkingBlock(internalTurns, thinkingBlockId);
+          thinkingBlockId++;
+        } else {
+          html += renderTurn(turn);
+          i++;
+        }
+      }
+
+      html += '</div>';
+
+      content.innerHTML = html;
+
+      // Attach event listeners for tool chips
+      content.querySelectorAll('.tool-chip').forEach(chip => {
+        chip.addEventListener('click', () => toggleToolExpansion(chip));
+      });
+
+      // Attach event listeners for thinking blocks
+      content.querySelectorAll('.thinking-header').forEach(header => {
+        header.addEventListener('click', () => toggleThinkingBlock(header));
+      });
+    }
+
+    // Render a collapsible thinking block
+    function renderThinkingBlock(turns, blockId) {
+      const isExpanded = expandedThinking.has(blockId);
+      const turnCount = turns.length;
+      const toolCount = turns.reduce((acc, t) => acc + (t.toolCalls?.length || 0), 0);
+
+      let summary = `${turnCount} internal message${turnCount !== 1 ? 's' : ''}`;
+      if (toolCount > 0) {
+        summary += `, ${toolCount} tool call${toolCount !== 1 ? 's' : ''}`;
+      }
+
+      let html = `
+        <div class="thinking-block ${isExpanded ? 'expanded' : ''}" data-block-id="${blockId}">
+          <button class="thinking-header">
+            <span class="thinking-icon">${isExpanded ? '▼' : '▶'}</span>
+            <span class="thinking-label">${isExpanded ? 'Hide' : 'Show'} thinking</span>
+            <span class="thinking-summary">${summary}</span>
+          </button>
+      `;
+
+      if (isExpanded) {
+        html += '<div class="thinking-content">';
+        for (const turn of turns) {
+          html += renderTurn(turn);
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // Toggle thinking block expansion
+    function toggleThinkingBlock(header) {
+      const block = header.closest('.thinking-block');
+      const blockId = parseInt(block.dataset.blockId, 10);
+
+      if (expandedThinking.has(blockId)) {
+        expandedThinking.delete(blockId);
+      } else {
+        expandedThinking.add(blockId);
+      }
+
+      renderSession();
+    }
+
+    // Process conversation to group tool calls with their results
+    function processConversation(conversation) {
+      const turns = [];
+      let pendingToolCalls = new Map(); // tool_use_id -> tool_use object
+
+      // First pass: merge assistant messages with the same message ID
+      // Claude Code records each streaming chunk as a separate entry
+      // Also track command/meta messages to attach to the turn that called the Skill tool
+      const mergedMessages = [];
+      const assistantMessageMap = new Map(); // message.id -> merged message
+      let lastSkillCallerMsg = null; // The assistant message that called a Skill tool
+      let pendingSkillContext = null; // { name, prompt } to attach
+
+      for (const msg of conversation) {
+        // Skip non-message entries (file-history-snapshot, etc.)
+        if (msg.type !== 'user' && msg.type !== 'assistant') {
+          continue;
+        }
+
+        if (msg.type === 'assistant') {
+          const msgId = msg.message?.id;
+          if (msgId && assistantMessageMap.has(msgId)) {
+            // Merge content into existing message
+            const existing = assistantMessageMap.get(msgId);
+            const newContent = msg.message?.content || [];
+            if (Array.isArray(newContent)) {
+              existing.message.content.push(...newContent);
+              // Check if this chunk has a Skill tool call
+              for (const item of newContent) {
+                if (item.type === 'tool_use' && item.name === 'Skill') {
+                  lastSkillCallerMsg = existing;
+                }
+              }
+            }
+            // Update stop_reason to latest (final chunk has the real reason)
+            if (msg.message?.stop_reason) {
+              existing.stopReason = msg.message.stop_reason;
+            }
+          } else {
+            // New assistant message
+            const cloned = JSON.parse(JSON.stringify(msg));
+            // Ensure content is an array
+            if (typeof cloned.message?.content === 'string') {
+              cloned.message.content = [{ type: 'text', text: cloned.message.content }];
+            } else if (!Array.isArray(cloned.message?.content)) {
+              cloned.message.content = [];
+            }
+            // Track stop_reason (will be updated if more chunks come)
+            cloned.stopReason = msg.message?.stop_reason;
+            // Check if this message has a Skill tool call
+            for (const item of cloned.message.content) {
+              if (item.type === 'tool_use' && item.name === 'Skill') {
+                lastSkillCallerMsg = cloned;
+              }
+            }
+            mergedMessages.push(cloned);
+            if (msgId) {
+              assistantMessageMap.set(msgId, cloned);
+            }
+          }
+        } else {
+          // User message - check for command/meta messages
+          const content = msg.message?.content;
+
+          // Capture command invocation markers
+          if (typeof content === 'string' && content.includes('<command-message>')) {
+            const nameMatch = content.match(/<command-name>([^<]+)<\/command-name>/);
+            const skillName = nameMatch ? nameMatch[1] : 'Unknown Skill';
+            pendingSkillContext = { name: skillName, prompt: null };
+            continue;
+          }
+
+          // Capture meta messages (skill prompts)
+          if (msg.isMeta) {
+            // Extract text content from the meta message
+            let promptText = '';
+            if (typeof content === 'string') {
+              promptText = content;
+            } else if (Array.isArray(content)) {
+              promptText = content
+                .filter(item => item.type === 'text')
+                .map(item => item.text)
+                .join('\n');
+            }
+
+            if (pendingSkillContext) {
+              pendingSkillContext.prompt = promptText;
+            }
+
+            // Attach to the message that called the Skill tool
+            if (lastSkillCallerMsg && pendingSkillContext) {
+              lastSkillCallerMsg.skillContext = pendingSkillContext;
+              pendingSkillContext = null;
+              lastSkillCallerMsg = null;
+            }
+            continue;
+          }
+
+          mergedMessages.push(msg);
+        }
+      }
+
+      // Second pass: process merged messages into turns
+      for (const msg of mergedMessages) {
+        const role = msg.type;
+        // Handle content being either a string or an array
+        let msgContent = msg.message?.content || [];
+        if (typeof msgContent === 'string') {
+          msgContent = [{ type: 'text', text: msgContent }];
+        }
+
+        if (role === 'assistant') {
+          const turn = {
+            role: 'assistant',
+            timestamp: msg.timestamp,
+            text: '',
+            toolCalls: [],
+            skillContext: msg.skillContext || null,
+            isInternal: msg.stopReason === 'tool_use'
+          };
+
+          for (const item of msgContent) {
+            if (item.type === 'text') {
+              turn.text += item.text;
+            } else if (item.type === 'tool_use') {
+              const toolCall = {
+                id: item.id,
+                name: item.name,
+                input: item.input,
+                result: null
+              };
+              turn.toolCalls.push(toolCall);
+              pendingToolCalls.set(item.id, toolCall);
+            }
+          }
+
+          if (turn.text || turn.toolCalls.length > 0) {
+            turns.push(turn);
+          }
+        } else if (role === 'user') {
+          // Check if this is just tool results or actual user input
+          let hasUserText = false;
+          let userText = '';
+
+          for (const item of msgContent) {
+            if (item.type === 'text') {
+              hasUserText = true;
+              userText += item.text;
+            } else if (item.type === 'tool_result') {
+              // Attach result to pending tool call
+              const toolCall = pendingToolCalls.get(item.tool_use_id);
+              if (toolCall) {
+                toolCall.result = item.content;
+              }
+            }
+          }
+
+          if (hasUserText && userText.trim()) {
+            turns.push({
+              role: 'user',
+              timestamp: msg.timestamp,
+              text: userText
+            });
+          }
+        }
+      }
+
+      return turns;
+    }
+
+    // Render a single turn
+    function renderTurn(turn) {
+      const roleClass = turn.role;
+      const roleLabel = turn.role === 'assistant' ? 'AI' : 'User';
+      const internalClass = turn.isInternal ? 'internal' : '';
+
+      let html = `
+        <div class="turn ${roleClass} ${internalClass}">
+          <div class="turn-header">
+            <span class="turn-role">${roleLabel}</span>
+            ${turn.isInternal ? '<span class="internal-badge">internal</span>' : ''}
+            ${turn.skillContext ? `<span class="skill-badge">${escapeHtml(turn.skillContext.name)}</span>` : ''}
+          </div>
+          <div class="turn-content">${escapeHtml(turn.text)}</div>
+      `;
+
+      // Skill context and tool calls
+      const hasSkill = turn.skillContext && turn.skillContext.prompt;
+      const hasTools = turn.toolCalls && turn.toolCalls.length > 0;
+
+      if (hasSkill || hasTools) {
+        html += '<div class="tool-calls">';
+
+        // Tool call chips first
+        if (hasTools) {
+          for (const tool of turn.toolCalls) {
+            html += renderToolChip(tool);
+          }
+        }
+
+        // Skill context chip (after tool chips, to the right)
+        if (hasSkill) {
+          const skillId = 'skill-' + turn.timestamp;
+          const expanded = expandedTools.has(skillId) ? 'expanded' : '';
+          html += `
+            <button class="tool-chip skill-chip ${expanded}" data-tool-id="${skillId}">
+              <span class="tool-chip-icon">⚡</span>
+              <span class="tool-chip-name">Skill Prompt</span>
+              <span class="tool-chip-detail">${escapeHtml(turn.skillContext.name)}</span>
+            </button>
+          `;
+        }
+        html += '</div>';
+
+        // Expanded skill prompt
+        if (hasSkill && expandedTools.has('skill-' + turn.timestamp)) {
+          html += `
+            <div class="tool-expansion">
+              <div class="tool-expansion-header">
+                <span class="tool-expansion-title">Skill: ${escapeHtml(turn.skillContext.name)}</span>
+              </div>
+              <div class="tool-expansion-content">${escapeHtml(turn.skillContext.prompt)}</div>
+            </div>
+          `;
+        }
+
+        // Expanded tool details
+        if (hasTools) {
+          for (const tool of turn.toolCalls) {
+            if (expandedTools.has(tool.id)) {
+              html += renderToolExpansion(tool);
+            }
+          }
+        }
+      }
+
+      html += '</div>';
+      return html;
+    }
+
+    // Render a tool chip
+    function renderToolChip(tool) {
+      const icon = getToolIcon(tool.name);
+      const detail = getToolDetail(tool);
+      const expanded = expandedTools.has(tool.id) ? 'expanded' : '';
+
+      return `
+        <button class="tool-chip ${expanded}" data-tool-id="${tool.id}">
+          <span class="tool-chip-icon">${icon}</span>
+          <span class="tool-chip-name">${tool.name}</span>
+          <span class="tool-chip-detail">${escapeHtml(detail)}</span>
+        </button>
+      `;
+    }
+
+    // Get icon for tool type
+    function getToolIcon(toolName) {
+      const icons = {
+        'Read': '📖',
+        'Edit': '✏️',
+        'Write': '📝',
+        'Bash': '▶️',
+        'Grep': '🔍',
+        'Glob': '📂',
+        'WebFetch': '🌐',
+        'WebSearch': '🔎',
+        'Task': '🤖',
+        'TodoWrite': '☑️'
+      };
+      return icons[toolName] || '🔧';
+    }
+
+    // Get short detail for tool chip
+    function getToolDetail(tool) {
+      const input = tool.input || {};
+
+      switch (tool.name) {
+        case 'Read':
+          return shortenPath(input.file_path);
+        case 'Edit':
+        case 'Write':
+          return shortenPath(input.file_path);
+        case 'Bash':
+          return truncate(input.command, 40);
+        case 'Grep':
+          return input.pattern || '';
+        case 'Glob':
+          return input.pattern || '';
+        default:
+          return '';
+      }
+    }
+
+    // Render expanded tool details
+    function renderToolExpansion(tool) {
+      const input = tool.input || {};
+      let content = '';
+      let title = tool.name;
+
+      switch (tool.name) {
+        case 'Read':
+          title = `Read: ${input.file_path || 'file'}`;
+          content = tool.result || '(no content)';
+          break;
+        case 'Edit':
+          title = `Edit: ${input.file_path || 'file'}`;
+          content = formatDiff(input.old_string, input.new_string);
+          break;
+        case 'Write':
+          title = `Write: ${input.file_path || 'file'}`;
+          content = input.content || '(no content)';
+          break;
+        case 'Bash':
+          title = `Bash: ${truncate(input.command, 60)}`;
+          content = `$ ${input.command}\n\n${tool.result || '(no output)'}`;
+          break;
+        default:
+          content = JSON.stringify(input, null, 2);
+          if (tool.result) {
+            content += '\n\n--- Result ---\n' +
+              (typeof tool.result === 'string' ? tool.result : JSON.stringify(tool.result, null, 2));
+          }
+      }
+
+      return `
+        <div class="tool-expansion" data-tool-id="${tool.id}">
+          <div class="tool-expansion-header">
+            <span class="tool-expansion-title">${escapeHtml(title)}</span>
+          </div>
+          <div class="tool-expansion-content">${escapeHtml(content)}</div>
+        </div>
+      `;
+    }
+
+    // Format a diff from old/new strings
+    function formatDiff(oldStr, newStr) {
+      if (!oldStr && !newStr) return '(no changes)';
+
+      let diff = '';
+      if (oldStr) {
+        diff += '--- old\n';
+        diff += oldStr.split('\n').map(l => '- ' + l).join('\n');
+      }
+      if (newStr) {
+        diff += '\n+++ new\n';
+        diff += newStr.split('\n').map(l => '+ ' + l).join('\n');
+      }
+      return diff;
+    }
+
+    // Toggle tool expansion
+    function toggleToolExpansion(chip) {
+      const toolId = chip.dataset.toolId;
+
+      if (expandedTools.has(toolId)) {
+        expandedTools.delete(toolId);
+      } else {
+        expandedTools.add(toolId);
+      }
+
+      renderSession();
+    }
+
+    // Utility functions
+    function escapeHtml(str) {
+      if (!str) return '';
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function formatTime(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    function shortenPath(path) {
+      if (!path) return '';
+      const parts = path.split('/');
+      if (parts.length <= 2) return path;
+      return '.../' + parts.slice(-2).join('/');
+    }
+
+    function truncate(str, len) {
+      if (!str) return '';
+      if (str.length <= len) return str;
+      return str.substring(0, len) + '...';
+    }
+
+    // Start the app
+    init();
+  </script>
+</body>
+</html>

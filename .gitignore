@@ -1,0 +1,6 @@
+# Real session backups (may contain sensitive data)
+first-attempt-*.json
+session-backups/
+
+# OS files
+.DS_Store
