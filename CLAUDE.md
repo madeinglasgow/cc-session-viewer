@@ -81,6 +81,13 @@ When users run shell commands via `!` in Claude Code, the session contains conse
 - Gray stdout, red stderr
 - Cyan border and "Bash" label (instead of coral "User")
 
+### Turn Card Styling
+
+Each turn type has a distinct left border and label styling:
+- **User turns**: Coral border (`--coral` / #F87171), coral-tinted label background
+- **Bash turns**: Cyan border (#0092b8), cyan-tinted label background
+- **AI turns**: Dark gray border (#171717), light gray label background (#E8E8E8)
+
 ### Message Types Handled
 
 - `type: "assistant"` with `stop_reason: "end_turn"` = user-facing response
