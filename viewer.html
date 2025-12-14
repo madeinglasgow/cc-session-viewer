@@ -1019,7 +1019,20 @@
           if (typeof content === 'string' && content.includes('<command-message>')) {
             const nameMatch = content.match(/<command-name>([^<]+)<\/command-name>/);
             const commandName = nameMatch ? nameMatch[1] : 'Unknown';
-            // Store for both skill context and slash commands
+            const messageMatch = content.match(/<command-message>([^<]*)<\/command-message>/);
+            const commandMessage = messageMatch ? messageMatch[1] : '';
+
+            // Check if this is a slash command being executed (contains "is running")
+            if (commandMessage.includes('is running')) {
+              // This is a slash command like /backup-session - display it
+              const cloned = JSON.parse(JSON.stringify(msg));
+              cloned.slashCommandName = commandName;
+              cloned.slashCommandMessage = commandMessage;
+              mergedMessages.push(cloned);
+              continue;
+            }
+
+            // Otherwise it's a skill invocation - store for later attachment
             pendingSkillContext = { name: commandName, prompt: null };
             pendingSlashCommand = commandName;
             continue;
@@ -1135,9 +1148,10 @@
               text: userText,
               images: userImages
             };
-            // Attach slash command name if present
+            // Attach slash command info if present
             if (msg.slashCommandName) {
               turn.slashCommandName = msg.slashCommandName;
+              turn.slashCommandMessage = msg.slashCommandMessage || '';
             }
             turns.push(turn);
           }
@@ -1209,9 +1223,9 @@
           const hasSlashCommand = turn.role === 'user' && turn.slashCommandName;
 
           if (hasSlashCommand) {
-            // Extract stdout from the content
+            // Extract stdout from the content, or use the command message if no stdout
             const stdoutMatch = turn.text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
-            const stdout = stdoutMatch ? stdoutMatch[1].trim() : '';
+            const stdout = stdoutMatch ? stdoutMatch[1].trim() : (turn.slashCommandMessage || '');
 
             // Create a slash command turn
             mergedTurns.push({
