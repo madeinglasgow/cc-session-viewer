@@ -300,6 +300,15 @@
       color: #006680;
     }
 
+    .turn.user.slash-command-mode {
+      border-left: 3px solid #8b5cf6;
+    }
+
+    .turn.user.slash-command-mode .turn-role {
+      background: #ede9fe;
+      color: #6d28d9;
+    }
+
     .turn.assistant {
       border-left: 3px solid #171717;
       background: white;
@@ -479,6 +488,15 @@
       color: #f48771;
       white-space: pre-wrap;
       word-wrap: break-word;
+    }
+
+    /* Slash command terminal variant */
+    .slash-command-terminal {
+      border: 1px solid #8b5cf6;
+    }
+
+    .slash-command-terminal .bash-command::before {
+      content: '';  /* Command already starts with / */
     }
 
     .bash-stderr:empty {
@@ -944,6 +962,7 @@
       const assistantMessageMap = new Map(); // message.id -> merged message
       let lastSkillCallerMsg = null; // The assistant message that called a Skill tool
       let pendingSkillContext = null; // { name, prompt } to attach
+      let pendingSlashCommand = null; // Command name for local commands like /clear
 
       for (const msg of conversation) {
         // Skip non-message entries (file-history-snapshot, etc.)
@@ -999,8 +1018,21 @@
           // Capture command invocation markers
           if (typeof content === 'string' && content.includes('<command-message>')) {
             const nameMatch = content.match(/<command-name>([^<]+)<\/command-name>/);
-            const skillName = nameMatch ? nameMatch[1] : 'Unknown Skill';
-            pendingSkillContext = { name: skillName, prompt: null };
+            const commandName = nameMatch ? nameMatch[1] : 'Unknown';
+            // Store for both skill context and slash commands
+            pendingSkillContext = { name: commandName, prompt: null };
+            pendingSlashCommand = commandName;
+            continue;
+          }
+
+          // Check for local command output (like /clear)
+          if (typeof content === 'string' && content.includes('<local-command-stdout>')) {
+            // Attach the pending slash command name to this message
+            const cloned = JSON.parse(JSON.stringify(msg));
+            cloned.slashCommandName = pendingSlashCommand;
+            pendingSlashCommand = null;
+            pendingSkillContext = null; // Clear skill context since this is a local command
+            mergedMessages.push(cloned);
             continue;
           }
 
@@ -1097,12 +1129,17 @@
           }
 
           if (hasUserContent && (userText.trim() || userImages.length > 0)) {
-            turns.push({
+            const turn = {
               role: 'user',
               timestamp: msg.timestamp,
               text: userText,
               images: userImages
-            });
+            };
+            // Attach slash command name if present
+            if (msg.slashCommandName) {
+              turn.slashCommandName = msg.slashCommandName;
+            }
+            turns.push(turn);
           }
         }
       }
@@ -1168,8 +1205,30 @@
             bashCommands: bashCommands
           });
         } else {
-          mergedTurns.push(turn);
-          i++;
+          // Check if this is a user turn with slash command (has slashCommandName from earlier processing)
+          const hasSlashCommand = turn.role === 'user' && turn.slashCommandName;
+
+          if (hasSlashCommand) {
+            // Extract stdout from the content
+            const stdoutMatch = turn.text.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+            const stdout = stdoutMatch ? stdoutMatch[1].trim() : '';
+
+            // Create a slash command turn
+            mergedTurns.push({
+              role: 'user',
+              timestamp: turn.timestamp,
+              text: '',
+              images: turn.images || [],
+              slashCommands: [{
+                command: turn.slashCommandName,
+                stdout: stdout
+              }]
+            });
+            i++;
+          } else {
+            mergedTurns.push(turn);
+            i++;
+          }
         }
       }
 
@@ -1179,8 +1238,9 @@
     // Render a single turn
     function renderTurn(turn, turnIndex) {
       const isBashTurn = turn.bashCommands && turn.bashCommands.length > 0;
-      const roleClass = isBashTurn ? 'user bash-mode' : turn.role;
-      const roleLabel = turn.role === 'assistant' ? 'AI' : (isBashTurn ? 'Bash' : 'User');
+      const isSlashCommandTurn = turn.slashCommands && turn.slashCommands.length > 0;
+      const roleClass = isSlashCommandTurn ? 'user slash-command-mode' : (isBashTurn ? 'user bash-mode' : turn.role);
+      const roleLabel = turn.role === 'assistant' ? 'AI' : (isSlashCommandTurn ? 'Slash Command' : (isBashTurn ? 'Bash' : 'User'));
       const internalClass = turn.isInternal ? 'internal' : '';
       const turnId = turnIndex !== undefined ? `turn-${turnIndex}` : null;
 
@@ -1193,8 +1253,11 @@
       // Check for bash mode content in user turns
       let contentHtml;
 
-      // First check for pre-merged bash commands (from processConversation)
-      if (turn.bashCommands && turn.bashCommands.length > 0) {
+      // First check for pre-merged slash commands (from processConversation)
+      if (turn.slashCommands && turn.slashCommands.length > 0) {
+        contentHtml = renderSlashCommandSession(turn.slashCommands);
+      } else if (turn.bashCommands && turn.bashCommands.length > 0) {
+        // Check for pre-merged bash commands (from processConversation)
         contentHtml = renderBashSession(turn.bashCommands);
       } else {
         // Fall back to inline parsing for any remaining cases
@@ -1465,6 +1528,30 @@
               <span class="bash-terminal-dot green"></span>
             </div>
             <span class="bash-terminal-title">bash</span>
+          </div>
+          <div class="bash-terminal-body">
+            ${commandsHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    // Render a slash command session
+    function renderSlashCommandSession(commands) {
+      const commandsHtml = commands.map(cmd => `
+        <div class="bash-command">${escapeHtml(cmd.command)}</div>
+        ${cmd.stdout ? `<div class="bash-output">${escapeHtml(cmd.stdout)}</div>` : ''}
+      `).join('');
+
+      return `
+        <div class="bash-terminal slash-command-terminal">
+          <div class="bash-terminal-header">
+            <div class="bash-terminal-dots">
+              <span class="bash-terminal-dot red"></span>
+              <span class="bash-terminal-dot yellow"></span>
+              <span class="bash-terminal-dot green"></span>
+            </div>
+            <span class="bash-terminal-title">Slash Command</span>
           </div>
           <div class="bash-terminal-body">
             ${commandsHtml}
