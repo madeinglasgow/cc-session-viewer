@@ -77,9 +77,15 @@
 
     /* Main container */
     .container {
+      width: calc(100% - 340px); /* Scale with viewport, leave room for comments */
+      min-width: 400px;
       max-width: 900px;
       margin: 0 auto;
       padding: 2rem;
+    }
+
+    .container.has-comments {
+      transform: translateX(-100px); /* Shift slightly left when comments exist */
     }
 
     /* Session metadata */
@@ -532,18 +538,11 @@
 
     /* Turn row layout for comments */
     .turn-row {
-      display: grid;
-      grid-template-columns: 1fr 280px;
-      gap: 1rem;
-      align-items: start;
-    }
-
-    .turn-row.no-comment {
-      grid-template-columns: 1fr;
+      position: relative;
     }
 
     .turn-row .turn {
-      min-width: 0;
+      width: 100%;
     }
 
     /* Add comment button (hover reveal) */
@@ -573,6 +572,11 @@
 
     /* Comment card */
     .comment-card {
+      position: absolute;
+      top: 0;
+      left: 100%;
+      margin-left: 1rem;
+      width: 280px;
       background: var(--coral-light);
       border-left: 3px solid var(--coral);
       border-radius: 12px;
@@ -865,6 +869,11 @@
       html += '</div>';
 
       content.innerHTML = html;
+
+      // Update container class based on whether comments exist
+      const container = document.querySelector('.container');
+      const hasAnyComments = Object.keys(sessionComments).length > 0 || editingCommentId !== null;
+      container.classList.toggle('has-comments', hasAnyComments);
 
       // Attach event listeners for tool chips
       content.querySelectorAll('.tool-chip').forEach(chip => {
@@ -1502,7 +1511,7 @@
       const hasComment = !!comment || editingCommentId === turnId;
 
       return `
-        <div class="turn-row ${hasComment ? '' : 'no-comment'}" data-turn-index="${turnIndex}">
+        <div class="turn-row" data-turn-index="${turnIndex}">
           ${renderTurn(turn, turnIndex)}
           ${hasComment ? renderCommentCard(turnId, comment) : ''}
         </div>
