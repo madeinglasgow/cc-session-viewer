@@ -283,6 +283,15 @@
       background: white;
     }
 
+    .turn.user.bash-mode {
+      border-left: 3px solid #0092b8;
+    }
+
+    .turn.user.bash-mode .turn-role {
+      background: #e0f4f8;
+      color: #006680;
+    }
+
     .turn.assistant {
       border-left: none;
       background: white;
@@ -393,6 +402,79 @@
     .tool-expansion-content.diff .line-remove {
       background: #f8d7da;
       color: #721c24;
+    }
+
+    /* Bash mode terminal styling */
+    .bash-terminal {
+      background: #1e1e1e;
+      border-radius: 8px;
+      overflow: hidden;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.8125rem;
+      margin: 0.5rem 0;
+    }
+
+    .bash-terminal-header {
+      background: #3c3c3c;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .bash-terminal-dots {
+      display: flex;
+      gap: 0.375rem;
+    }
+
+    .bash-terminal-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    .bash-terminal-dot.red { background: #ff5f56; }
+    .bash-terminal-dot.yellow { background: #ffbd2e; }
+    .bash-terminal-dot.green { background: #27ca40; }
+
+    .bash-terminal-title {
+      color: #9d9d9d;
+      font-size: 0.75rem;
+      margin-left: auto;
+    }
+
+    .bash-terminal-body {
+      padding: 0.75rem 1rem;
+    }
+
+    .bash-command {
+      color: #d4d4d4;
+      margin-bottom: 0.5rem;
+    }
+
+    .bash-command::before {
+      content: '$ ';
+      color: #6a9955;
+    }
+
+    .bash-output {
+      color: #9d9d9d;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .bash-output:empty {
+      display: none;
+    }
+
+    .bash-stderr {
+      color: #f48771;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    .bash-stderr:empty {
+      display: none;
     }
 
     /* Tool result */
@@ -1014,13 +1096,76 @@
         }
       }
 
-      return turns;
+      // Post-process: merge bash-input/bash-stdout/bash-stderr consecutive user turns
+      const mergedTurns = [];
+      let i = 0;
+      while (i < turns.length) {
+        const turn = turns[i];
+
+        // Check if this is a user turn with bash-input
+        if (turn.role === 'user' && turn.text.includes('<bash-input>')) {
+          // Start a bash session - collect this and following stdout/stderr turns
+          const bashCommands = [];
+
+          while (i < turns.length && turns[i].role === 'user') {
+            const currentText = turns[i].text;
+
+            // Check for bash-input (new command)
+            const inputMatch = currentText.match(/<bash-input>([\s\S]*?)<\/bash-input>/);
+            if (inputMatch) {
+              bashCommands.push({
+                command: inputMatch[1].trim(),
+                stdout: '',
+                stderr: ''
+              });
+              i++;
+              continue;
+            }
+
+            // Check for bash-stdout (output for last command)
+            const stdoutMatch = currentText.match(/<bash-stdout>([\s\S]*?)<\/bash-stdout>/);
+            if (stdoutMatch && bashCommands.length > 0) {
+              bashCommands[bashCommands.length - 1].stdout = stdoutMatch[1].trim();
+              i++;
+              continue;
+            }
+
+            // Check for bash-stderr (error for last command)
+            const stderrMatch = currentText.match(/<bash-stderr>([\s\S]*?)<\/bash-stderr>/);
+            if (stderrMatch && bashCommands.length > 0) {
+              bashCommands[bashCommands.length - 1].stderr = stderrMatch[1].trim();
+              i++;
+              continue;
+            }
+
+            // Not a bash-related turn, stop collecting
+            break;
+          }
+
+          // Create a merged bash turn
+          if (bashCommands.length > 0) {
+            mergedTurns.push({
+              role: 'user',
+              timestamp: turn.timestamp,
+              text: '',
+              images: turn.images || [],
+              bashCommands: bashCommands
+            });
+          }
+        } else {
+          mergedTurns.push(turn);
+          i++;
+        }
+      }
+
+      return mergedTurns;
     }
 
     // Render a single turn
     function renderTurn(turn, turnIndex) {
-      const roleClass = turn.role;
-      const roleLabel = turn.role === 'assistant' ? 'AI' : 'User';
+      const isBashTurn = turn.bashCommands && turn.bashCommands.length > 0;
+      const roleClass = isBashTurn ? 'user bash-mode' : turn.role;
+      const roleLabel = turn.role === 'assistant' ? 'AI' : (isBashTurn ? 'Bash' : 'User');
       const internalClass = turn.isInternal ? 'internal' : '';
       const turnId = turnIndex !== undefined ? `turn-${turnIndex}` : null;
 
@@ -1028,6 +1173,29 @@
       let displayText = turn.text;
       if (turn.images && turn.images.length > 0) {
         displayText = displayText.replace(/\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]/g, '').trim();
+      }
+
+      // Check for bash mode content in user turns
+      let contentHtml;
+
+      // First check for pre-merged bash commands (from processConversation)
+      if (turn.bashCommands && turn.bashCommands.length > 0) {
+        contentHtml = renderBashSession(turn.bashCommands);
+      } else {
+        // Fall back to inline parsing for any remaining cases
+        const bashBlocks = turn.role === 'user' ? formatBashMode(displayText) : null;
+
+        if (bashBlocks) {
+          contentHtml = bashBlocks.map(block => {
+            if (block.type === 'bash') {
+              return renderBashTerminal(block.command, block.stdout, block.stderr);
+            } else {
+              return `<div class="turn-content">${escapeHtml(block.content)}</div>`;
+            }
+          }).join('');
+        } else {
+          contentHtml = `<div class="turn-content">${escapeHtml(displayText)}</div>`;
+        }
       }
 
       let html = `
@@ -1038,7 +1206,7 @@
             ${turn.skillContext ? `<span class="skill-badge">${escapeHtml(turn.skillContext.name)}</span>` : ''}
             ${turnId ? `<button class="add-comment-btn" onclick="addComment('${turnId}')">+ Note</button>` : ''}
           </div>
-          <div class="turn-content">${escapeHtml(displayText)}</div>
+          ${contentHtml}
       `;
 
       // Render images if present
@@ -1196,6 +1364,96 @@
             <span class="tool-expansion-title">${escapeHtml(title)}</span>
           </div>
           <div class="tool-expansion-content">${escapeHtml(content)}</div>
+        </div>
+      `;
+    }
+
+    // Format bash mode content (user turns with ! commands)
+    function formatBashMode(text) {
+      // Check if text contains bash-input tags
+      if (!text.includes('<bash-input>')) {
+        return null;
+      }
+
+      const blocks = [];
+
+      // Parse all bash-input with optional stdout/stderr
+      const bashPattern = /<bash-input>([\s\S]*?)<\/bash-input>(?:\s*<bash-stdout>([\s\S]*?)<\/bash-stdout>)?(?:\s*<bash-stderr>([\s\S]*?)<\/bash-stderr>)?/g;
+      let match;
+      let lastIndex = 0;
+
+      while ((match = bashPattern.exec(text)) !== null) {
+        // Add any text before this match as regular content
+        const before = text.slice(lastIndex, match.index).trim();
+        if (before) {
+          blocks.push({ type: 'text', content: before });
+        }
+
+        blocks.push({
+          type: 'bash',
+          command: match[1].trim(),
+          stdout: match[2] ? match[2].trim() : '',
+          stderr: match[3] ? match[3].trim() : ''
+        });
+
+        lastIndex = match.index + match[0].length;
+      }
+
+      // Add any remaining text after last match
+      const after = text.slice(lastIndex).trim();
+      if (after) {
+        blocks.push({ type: 'text', content: after });
+      }
+
+      if (blocks.length === 0 || !blocks.some(b => b.type === 'bash')) {
+        return null;
+      }
+
+      return blocks;
+    }
+
+    // Render bash terminal block for a single command
+    function renderBashTerminal(command, stdout, stderr) {
+      return `
+        <div class="bash-terminal">
+          <div class="bash-terminal-header">
+            <div class="bash-terminal-dots">
+              <span class="bash-terminal-dot red"></span>
+              <span class="bash-terminal-dot yellow"></span>
+              <span class="bash-terminal-dot green"></span>
+            </div>
+            <span class="bash-terminal-title">bash</span>
+          </div>
+          <div class="bash-terminal-body">
+            <div class="bash-command">${escapeHtml(command)}</div>
+            <div class="bash-output">${escapeHtml(stdout)}</div>
+            <div class="bash-stderr">${escapeHtml(stderr)}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Render a bash session with multiple commands in one terminal
+    function renderBashSession(commands) {
+      const commandsHtml = commands.map(cmd => `
+        <div class="bash-command">${escapeHtml(cmd.command)}</div>
+        <div class="bash-output">${escapeHtml(cmd.stdout)}</div>
+        <div class="bash-stderr">${escapeHtml(cmd.stderr)}</div>
+      `).join('');
+
+      return `
+        <div class="bash-terminal">
+          <div class="bash-terminal-header">
+            <div class="bash-terminal-dots">
+              <span class="bash-terminal-dot red"></span>
+              <span class="bash-terminal-dot yellow"></span>
+              <span class="bash-terminal-dot green"></span>
+            </div>
+            <span class="bash-terminal-title">bash</span>
+          </div>
+          <div class="bash-terminal-body">
+            ${commandsHtml}
+          </div>
         </div>
       `;
     }
