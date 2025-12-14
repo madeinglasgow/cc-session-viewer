@@ -257,6 +257,27 @@
       word-wrap: break-word;
     }
 
+    .turn-images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .turn-image {
+      max-width: 100%;
+      max-height: 400px;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    .turn-image:hover {
+      transform: scale(1.02);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
     .turn.user {
       border-left: 3px solid var(--coral);
       background: white;
@@ -935,6 +956,7 @@
             timestamp: msg.timestamp,
             text: '',
             toolCalls: [],
+            images: [],
             skillContext: msg.skillContext || null,
             isInternal: msg.stopReason === 'tool_use'
           };
@@ -942,6 +964,8 @@
           for (const item of msgContent) {
             if (item.type === 'text') {
               turn.text += item.text;
+            } else if (item.type === 'image' && item.source) {
+              turn.images.push(item.source);
             } else if (item.type === 'tool_use') {
               const toolCall = {
                 id: item.id,
@@ -954,18 +978,22 @@
             }
           }
 
-          if (turn.text || turn.toolCalls.length > 0) {
+          if (turn.text || turn.toolCalls.length > 0 || turn.images.length > 0) {
             turns.push(turn);
           }
         } else if (role === 'user') {
           // Check if this is just tool results or actual user input
-          let hasUserText = false;
+          let hasUserContent = false;
           let userText = '';
+          let userImages = [];
 
           for (const item of msgContent) {
             if (item.type === 'text') {
-              hasUserText = true;
+              hasUserContent = true;
               userText += item.text;
+            } else if (item.type === 'image' && item.source) {
+              hasUserContent = true;
+              userImages.push(item.source);
             } else if (item.type === 'tool_result') {
               // Attach result to pending tool call
               const toolCall = pendingToolCalls.get(item.tool_use_id);
@@ -975,11 +1003,12 @@
             }
           }
 
-          if (hasUserText && userText.trim()) {
+          if (hasUserContent && (userText.trim() || userImages.length > 0)) {
             turns.push({
               role: 'user',
               timestamp: msg.timestamp,
-              text: userText
+              text: userText,
+              images: userImages
             });
           }
         }
@@ -995,6 +1024,12 @@
       const internalClass = turn.isInternal ? 'internal' : '';
       const turnId = turnIndex !== undefined ? `turn-${turnIndex}` : null;
 
+      // Strip image metadata text if turn has images
+      let displayText = turn.text;
+      if (turn.images && turn.images.length > 0) {
+        displayText = displayText.replace(/\[Image: original \d+x\d+, displayed at \d+x\d+\. Multiply coordinates by [\d.]+ to map to original image\.\]/g, '').trim();
+      }
+
       let html = `
         <div class="turn ${roleClass} ${internalClass}">
           <div class="turn-header">
@@ -1003,8 +1038,19 @@
             ${turn.skillContext ? `<span class="skill-badge">${escapeHtml(turn.skillContext.name)}</span>` : ''}
             ${turnId ? `<button class="add-comment-btn" onclick="addComment('${turnId}')">+ Note</button>` : ''}
           </div>
-          <div class="turn-content">${escapeHtml(turn.text)}</div>
+          <div class="turn-content">${escapeHtml(displayText)}</div>
       `;
+
+      // Render images if present
+      if (turn.images && turn.images.length > 0) {
+        html += '<div class="turn-images">';
+        for (const img of turn.images) {
+          const mediaType = img.media_type || 'image/png';
+          const data = img.data || '';
+          html += `<img class="turn-image" src="data:${mediaType};base64,${data}" alt="Uploaded image" onclick="window.open(this.src, '_blank')">`;
+        }
+        html += '</div>';
+      }
 
       // Skill context and tool calls
       const hasSkill = turn.skillContext && turn.skillContext.prompt;
