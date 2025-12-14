@@ -421,6 +421,120 @@
       color: #721c24;
     }
 
+    /* AskUserQuestion Q&A styling */
+    .auq-content {
+      white-space: normal;
+      font-family: inherit;
+    }
+
+    .auq-question-block {
+      padding: 0.5rem 0;
+    }
+
+    .auq-header {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--gray-500);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .auq-question {
+      font-size: 0.9rem;
+      color: var(--gray-800);
+      font-weight: 500;
+      margin-bottom: 0.75rem;
+    }
+
+    .auq-options {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .auq-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      background: var(--gray-100);
+    }
+
+    .auq-option-selected {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+    }
+
+    .auq-radio {
+      color: var(--gray-400);
+      font-size: 0.875rem;
+      line-height: 1.4;
+      flex-shrink: 0;
+    }
+
+    .auq-option-selected .auq-radio {
+      color: #16a34a;
+    }
+
+    .auq-option-content {
+      display: flex;
+      flex-direction: column;
+      gap: 0.125rem;
+    }
+
+    .auq-option-label {
+      font-size: 0.875rem;
+      color: var(--gray-700);
+      font-weight: 500;
+    }
+
+    .auq-option-selected .auq-option-label {
+      color: #166534;
+    }
+
+    .auq-option-desc {
+      font-size: 0.75rem;
+      color: var(--gray-500);
+    }
+
+    .auq-option-selected .auq-option-desc {
+      color: #15803d;
+    }
+
+    .auq-answer {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px dashed var(--gray-300);
+    }
+
+    .auq-answer-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--gray-500);
+    }
+
+    .auq-answer-value {
+      font-size: 0.875rem;
+      color: #16a34a;
+      font-weight: 500;
+    }
+
+    .auq-custom-answer {
+      color: #2563eb;
+      font-style: italic;
+    }
+
+    .auq-divider {
+      border: none;
+      border-top: 1px solid var(--gray-200);
+      margin: 1rem 0;
+    }
+
     /* Bash mode terminal styling */
     .bash-terminal {
       background: #1e1e1e;
@@ -1137,6 +1251,10 @@
               const toolCall = pendingToolCalls.get(item.tool_use_id);
               if (toolCall) {
                 toolCall.result = item.content;
+                // Attach structured toolUseResult if available (e.g., AskUserQuestion answers)
+                if (msg.toolUseResult) {
+                  toolCall.toolUseResult = msg.toolUseResult;
+                }
               }
             }
           }
@@ -1393,7 +1511,8 @@
         'WebFetch': '🌐',
         'WebSearch': '🔎',
         'Task': '🤖',
-        'TodoWrite': '☑️'
+        'TodoWrite': '☑️',
+        'AskUserQuestion': '❓'
       };
       return icons[toolName] || '🔧';
     }
@@ -1414,6 +1533,9 @@
           return input.pattern || '';
         case 'Glob':
           return input.pattern || '';
+        case 'AskUserQuestion':
+          const qCount = input.questions?.length || 0;
+          return `${qCount} question${qCount !== 1 ? 's' : ''}`;
         default:
           return '';
       }
@@ -1424,6 +1546,11 @@
       const input = tool.input || {};
       let content = '';
       let title = tool.name;
+
+      // Special handling for AskUserQuestion - returns HTML directly
+      if (tool.name === 'AskUserQuestion') {
+        return renderAskUserQuestionExpansion(tool);
+      }
 
       switch (tool.name) {
         case 'Read':
@@ -1456,6 +1583,61 @@
             <span class="tool-expansion-title">${escapeHtml(title)}</span>
           </div>
           <div class="tool-expansion-content">${escapeHtml(content)}</div>
+        </div>
+      `;
+    }
+
+    // Render AskUserQuestion expansion with formatted Q&A
+    function renderAskUserQuestionExpansion(tool) {
+      const input = tool.input || {};
+      const questions = input.questions || [];
+
+      // Get answers from toolUseResult if available, otherwise try to parse from result string
+      let answers = {};
+      if (tool.toolUseResult && tool.toolUseResult.answers) {
+        answers = tool.toolUseResult.answers;
+      }
+
+      const questionsHtml = questions.map((q, idx) => {
+        const answer = answers[q.question] || '';
+        const isCustomAnswer = answer && !q.options?.some(opt => opt.label === answer);
+
+        const optionsHtml = (q.options || []).map(opt => {
+          const isSelected = opt.label === answer;
+          return `
+            <div class="auq-option ${isSelected ? 'auq-option-selected' : ''}">
+              <span class="auq-radio">${isSelected ? '●' : '○'}</span>
+              <div class="auq-option-content">
+                <span class="auq-option-label">${escapeHtml(opt.label)}</span>
+                ${opt.description ? `<span class="auq-option-desc">${escapeHtml(opt.description)}</span>` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="auq-question-block">
+            <div class="auq-header">${escapeHtml(q.header || '')}</div>
+            <div class="auq-question">${escapeHtml(q.question)}</div>
+            <div class="auq-options">${optionsHtml}</div>
+            ${answer ? `
+              <div class="auq-answer">
+                <span class="auq-answer-label">Answer:</span>
+                <span class="auq-answer-value ${isCustomAnswer ? 'auq-custom-answer' : ''}">"${escapeHtml(answer)}"</span>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('<hr class="auq-divider">');
+
+      return `
+        <div class="tool-expansion" data-tool-id="${tool.id}">
+          <div class="tool-expansion-header">
+            <span class="tool-expansion-title">Questions for User</span>
+          </div>
+          <div class="tool-expansion-content auq-content">
+            ${questionsHtml}
+          </div>
         </div>
       `;
     }
