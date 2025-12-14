@@ -154,10 +154,12 @@
     }
 
     .turn.assistant .turn-role {
-      font-weight: 600;
-      color: var(--gray-800);
-      background: none;
-      padding: 0;
+      font-weight: 500;
+      color: #171717;
+      background: #E8E8E8;
+      padding: 0.25rem 0.625rem;
+      border-radius: 4px;
+      display: inline-block;
     }
 
     .turn-header {
@@ -293,7 +295,7 @@
     }
 
     .turn.assistant {
-      border-left: none;
+      border-left: 3px solid #171717;
       background: white;
     }
 
@@ -1103,18 +1105,24 @@
         const turn = turns[i];
 
         // Check if this is a user turn with bash-input
-        if (turn.role === 'user' && turn.text.includes('<bash-input>')) {
+        const inputMatch = turn.role === 'user' ? turn.text.match(/<bash-input>([\s\S]*?)<\/bash-input>/) : null;
+        if (inputMatch) {
           // Start a bash session - collect this and following stdout/stderr turns
-          const bashCommands = [];
+          const bashCommands = [{
+            command: inputMatch[1].trim(),
+            stdout: '',
+            stderr: ''
+          }];
+          i++; // Move past the first bash-input turn
 
           while (i < turns.length && turns[i].role === 'user') {
             const currentText = turns[i].text;
 
             // Check for bash-input (new command)
-            const inputMatch = currentText.match(/<bash-input>([\s\S]*?)<\/bash-input>/);
-            if (inputMatch) {
+            const nextInputMatch = currentText.match(/<bash-input>([\s\S]*?)<\/bash-input>/);
+            if (nextInputMatch) {
               bashCommands.push({
-                command: inputMatch[1].trim(),
+                command: nextInputMatch[1].trim(),
                 stdout: '',
                 stderr: ''
               });
@@ -1143,15 +1151,13 @@
           }
 
           // Create a merged bash turn
-          if (bashCommands.length > 0) {
-            mergedTurns.push({
-              role: 'user',
-              timestamp: turn.timestamp,
-              text: '',
-              images: turn.images || [],
-              bashCommands: bashCommands
-            });
-          }
+          mergedTurns.push({
+            role: 'user',
+            timestamp: turn.timestamp,
+            text: '',
+            images: turn.images || [],
+            bashCommands: bashCommands
+          });
         } else {
           mergedTurns.push(turn);
           i++;
