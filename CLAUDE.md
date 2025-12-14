@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A viewer for Claude Code session backups. Displays recorded sessions with expandable tool calls, collapsible "thinking" blocks for internal messages, skill prompt context, and user-added notes/comments.
+A viewer for Claude Code session backups. Displays recorded sessions with expandable tool calls, collapsible "thinking" blocks for internal messages, skill prompt context, terminal-styled bash mode commands, and user-added notes/comments.
 
 ## Development
 
@@ -34,7 +34,7 @@ No build step. The viewer is a single self-contained HTML file with embedded CSS
 
 1. `discoverSessions()` - finds JSON files via directory listing
 2. `loadSession(url)` - fetches and parses session JSON, loads existing comments
-3. `processConversation()` - merges streaming chunks by message ID, filters system messages, attaches skill context
+3. `processConversation()` - merges streaming chunks by message ID, filters system messages, attaches skill context, merges bash mode turns
 4. `renderSession()` - groups internal turns into collapsible thinking blocks, renders timeline
 5. `renderTurnRow()` - wraps turn + comment card in grid layout
 6. `renderTurn()` / `renderThinkingBlock()` - generates HTML for individual turns
@@ -68,9 +68,23 @@ From `~/.claude/session_backup.py`:
 }
 ```
 
+### Bash Mode Rendering
+
+When users run shell commands via `!` in Claude Code, the session contains consecutive user turns with special tags:
+- `<bash-input>command</bash-input>` - the command entered
+- `<bash-stdout>output</bash-stdout>` - standard output
+- `<bash-stderr>errors</bash-stderr>` - standard error (optional)
+
+`processConversation()` merges these consecutive turns into a single turn with a `bashCommands` array. `renderBashSession()` then displays them in a terminal-styled card with:
+- Dark background with macOS-style traffic light dots
+- Green `$` prompt before commands
+- Gray stdout, red stderr
+- Cyan border and "Bash" label (instead of coral "User")
+
 ### Message Types Handled
 
 - `type: "assistant"` with `stop_reason: "end_turn"` = user-facing response
 - `type: "assistant"` with `stop_reason: "tool_use"` = internal working (shown in thinking blocks)
 - `type: "user"` with `isMeta: true` = injected skill prompts (attached to Skill tool call)
 - `type: "user"` with `<command-message>` = skill invocation markers (filtered)
+- `type: "user"` with `<bash-input>` = bash mode commands (merged into terminal cards)
